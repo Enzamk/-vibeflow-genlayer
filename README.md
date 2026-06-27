@@ -94,18 +94,18 @@ FUNDED ───────────────────┼─── CAN
 
 #### AI Decision Output (stored on-chain)
 
+The LLM verdict is produced through the equivalence principle and parsed into:
+
 ```json
 {
   "decision": "partial_refund",
   "refund_percentage": 40,
-  "explanation": "60% of goods delivered satisfactorily. 40% missing due to stock-out. Payer gets 40% refund.",
-  "evidence_assessment": {
-    "payer_evidence_strength": "moderate",
-    "payee_evidence_strength": "moderate",
-    "key_factors": ["60pct_confirmed_delivery", "40pct_stock_out", "both_partial_claims"]
-  }
+  "explanation": "60% of goods delivered satisfactorily. 40% missing due to stock-out. Payer gets 40% refund."
 }
 ```
+
+Validators independently rerun the same prompt and must agree on `decision`
+(exact) and `refund_percentage` (within ±10) for consensus.
 
 ### 2️⃣ Direct Mode Tests (`tests/direct/test_escrow.py`)
 
@@ -153,8 +153,8 @@ claude "Write a GenLayer escrow contract where AI consensus replaces the human a
 🤖 **Result:** `contracts/escrow.py` — GenLayer-native contract with:
 - No arbiter parameter — AI handles disputes
 - `submit_evidence()` for both parties
-- `resolve_with_ai()` using `gl.ai.prompt()` with consensus
-- Evidence assessment + explanation stored on-chain
+- `resolve_with_ai()` using `gl.nondet.exec_prompt()` + `gl.vm.run_nondet_unsafe()` equivalence principle
+- Decision + explanation stored on-chain
 
 ### Step 2 — Auto Validation (genvm-lint)
 
@@ -245,12 +245,39 @@ genlayer client deploy contracts/escrow.py --args '[50]' --network testnet
 ## 🏗️ Technical Depth
 
 - **Storage:** `TreeMap[Address, EscrowState]`, `DynArray[EventLog]`, `u256`
-- **SDK:** `@gl.public.view`, `@gl.public.write`, `gl.message`, `gl.transfer`, `gl.block.time`, `gl.ai.prompt`
-- **Error handling:** Classified `[EXPECTED]` (user errors) and `[EXTERNAL]` (system/AI errors)
+- **SDK:** `@gl.public.view`, `@gl.public.write`, `gl.message`, `gl.transfer`, `gl.block.time`, `gl.nondet.exec_prompt`, `gl.vm.run_nondet_unsafe`
+- **Consensus path:** Dispute resolution runs through GenLayer's REAL nondeterministic + equivalence-principle machinery — NOT a single leader-only LLM call
+- **Error handling:** Classified `[EXPECTED]` / `[EXTERNAL]` / `[TRANSIENT]` / `[LLM_ERROR]` prefixes for deterministic validator comparison
 - **GenLayer-native:** AI consensus replaces human arbiter — non-deterministic dispute resolution
 - **Evidence system:** Both parties submit on-chain — AI evaluates BOTH sides
-- **Transparency:** Decision + explanation + evidence_assessment stored permanently on-chain
+- **Transparency:** Decision + explanation stored permanently on-chain
 - **Gas efficient:** O(1) lookups, paginated event queries
+
+### 🔬 The Consensus Path (how validators agree)
+
+This is the part that makes the AI escrow resolution reproducible across
+validators instead of trusting one leader's answer:
+
+```
+resolve_with_ai(payer)
+  └─ _evaluate_dispute(escrow)
+       └─ gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
+            │
+            ├─ leader_fn:
+            │     gl.nondet.exec_prompt(prompt, response_format="json")
+            │     _parse_ai_verdict(raw)  -> {decision, refund_percentage, explanation}
+            │
+            └─ validator_fn(leaders_res):
+                  independently reruns the SAME prompt
+                  compares:
+                    * decision must match EXACTLY (settlement outcome)
+                    * refund_percentage within ±10 (partial cases)
+                  -> agree only if substantive decision converges
+```
+
+The prompt is built deterministically from on-chain escrow state, so the only
+nondeterminism is the LLM itself — which the equivalence principle handles by
+having validators independently rerun and compare the decision field.
 
 ---
 

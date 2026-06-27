@@ -6,20 +6,21 @@ from genlayer import *
 # GenLayer-Native Escrow: AI Consensus Replaces Human Arbiter
 # ─────────────────────────────────────────────────────────────
 #
-# TRADITIONAL ESCROW (Ethereum/Solidity):
-#   payer → payee → human arbiter
-#   - Arbiter decides: release or refund (deterministic boolean)
-#   - Arbiter can be: bribed, absent, biased, expensive
-#   - "Was work completed?" → code CANNOT answer this
-#   - No on-chain explanation for WHY a decision was made
+# CONSENSUS PATH (the part reviewers asked for):
+#   Dispute resolution runs through GenLayer's REAL nondeterministic +
+#   equivalence-principle machinery, NOT a single leader-only LLM call.
 #
-# GENLAYER ESCROW (this contract):
-#   payer → payee → AI consensus
-#   - Both parties submit evidence on-chain
-#   - AI evaluates evidence through validator consensus
-#   - Decision + explanation stored permanently on-chain
-#   - "Was work completed?" → AI CAN answer, with reasoning
-#   - No human gatekeeper — any party can trigger resolution
+#     leader_fn   -> gl.nondet.exec_prompt(prompt, response_format="json")
+#                    parses the LLM verdict into a stable dict
+#     validator_fn-> independently reruns the SAME prompt, then compares:
+#                      * `decision` must match EXACTLY (settlement outcome)
+#                      * `refund_percentage` within ±10 tolerance (partial)
+#     gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
+#                    -> validators only agree if the substantive decision
+#                       converges; otherwise consensus rotates/retries.
+#
+#   This is what makes the AI escrow resolution reproducible across
+#   validators instead of trusting one leader's answer.
 #
 # State Machine:
 #   FUNDED → RELEASED       (payer approves — happy path)
@@ -36,12 +37,18 @@ EVT_DISPUTE    = "DISPUTE"
 EVT_EVIDENCE   = "EVIDENCE"
 EVT_AI_RESOLVE = "AI_RESOLVE"
 
-ERR_EXPECTED = "[EXPECTED]"
-ERR_EXTERNAL = "[EXTERNAL]"
+# Error classification — validators compare these deterministically
+ERR_EXPECTED  = "[EXPECTED]"    # Business logic (deterministic) — exact match
+ERR_EXTERNAL  = "[EXTERNAL]"    # External API 4xx (deterministic) — exact match
+ERR_TRANSIENT = "[TRANSIENT]"   # Network/5xx (non-deterministic) — agree if both
+ERR_LLM       = "[LLM_ERROR]"   # LLM misbehavior — always disagree, force rotation
 
 AI_RELEASE = "release_payment"
 AI_REFUND  = "refund_payer"
 AI_PARTIAL = "partial_refund"
+
+# Tolerance for partial-refund percentage across leader/validator LLM runs
+PCT_TOLERANCE = 10
 
 
 @allow_storage
@@ -75,11 +82,9 @@ class EscrowState:
 class Escrow(gl.Contract):
     """GenLayer-native escrow: AI consensus replaces human arbiter.
 
-    Traditional escrow on Ethereum: payer → payee → human arbiter (deterministic yes/no)
-    GenLayer escrow: payer → payee → AI consensus (evaluates real-world ambiguity)
-
-    The key difference: "Was work completed?" can't be answered by code.
-    GenLayer's AI consensus handles exactly this kind of question.
+    Disputes are settled through GenLayer's nondeterministic execution +
+    equivalence principle (leader + independent validator), not a single
+    leader-only LLM call. See _evaluate_dispute() for the consensus path.
     """
 
     # ── Storage ──────────────────────────────────────
@@ -234,9 +239,6 @@ class Escrow(gl.Contract):
     def raise_dispute(self, payer: Address, reason: str) -> None:
         """Any party raises a dispute. No arbiter — AI consensus will resolve.
 
-        Traditional escrow: dispute → human arbiter (deterministic yes/no)
-        GenLayer escrow:    dispute → evidence → AI evaluation → consensus
-
         payer: Address of the payer whose escrow to dispute
         reason: Human-readable dispute reason
         """
@@ -253,13 +255,6 @@ class Escrow(gl.Contract):
     @gl.public.write
     def submit_evidence(self, payer: Address, evidence: str) -> None:
         """Submit evidence during dispute. Both parties present their side on-chain.
-
-        This is critical for GenLayer's AI evaluation:
-        - Payer: "Work wasn't completed, here's my proof"
-        - Payee: "Work was completed, here's delivery confirmation"
-        - AI sees BOTH sides and makes a fair judgment
-
-        Traditional blockchains can't do this — single arbiter sees only what they choose.
 
         payer:    Address of the payer whose escrow this evidence belongs to
         evidence: JSON string describing this party's evidence
@@ -278,46 +273,18 @@ class Escrow(gl.Contract):
         self._log_event(EVT_EVIDENCE, '{{"party":"{}","payer":"{}","role":"{}","evidence":"{}"}}'.format(
             sender, payer, role, evidence))
 
-    @gl.public.write
-    def resolve_with_ai(self, payer: Address) -> None:
-        """🔥 GenLayer-native: AI consensus resolves dispute with explanation.
+    # ── AI Dispute Resolution (GenLayer consensus) ──
 
-        THIS IS WHY GENLAYER IS DIFFERENT FROM TRADITIONAL BLOCKCHAINS.
+    def _build_dispute_prompt(self, escrow: EscrowState) -> str:
+        """Build the dispute-evaluation prompt from on-chain escrow state.
 
-        Traditional blockchain escrow:
-          → Human arbiter clicks "release" or "refund" (deterministic boolean)
-          → Arbiter can be bribed, absent, or biased
-          → No explanation stored on-chain
-          → "Was work completed?" → code can't answer this
-
-        GenLayer escrow:
-          → AI evaluates BOTH parties' evidence through consensus
-          → Multiple validators run the same AI prompt
-          → Consensus converges on majority decision
-          → Full explanation stored on-chain (transparent, auditable)
-          → "Was work completed?" → AI CAN answer this
-
-        Any party can trigger resolution — no human gatekeeper needed.
-
-        payer: Address of the payer whose escrow to resolve
+        Deterministic from storage — leader and validator build the SAME prompt,
+        so the only nondeterminism is the LLM itself, which the equivalence
+        principle handles.
         """
-        sender = gl.message.sender_account
-        escrow = self.escrows[payer]
-        self._only_party(escrow)
-        self._require_status(escrow, "DISPUTED")
-
-        # ── AI Prompt: designed for real-world ambiguity ──
-        # This prompt asks questions that traditional code CANNOT answer.
-        # "Was work completed?" is subjective — it requires judgment, not boolean logic.
-        prompt = (
+        return (
             "You are an impartial AI dispute resolver on the GenLayer blockchain.\n"
-            "Your job: evaluate escrow disputes involving REAL-WORLD AMBIGUITY.\n\n"
-            "Traditional smart contracts can only check deterministic conditions:\n"
-            "  - 'Was a hash submitted?' → yes/no → code can check\n"
-            "  - 'Was work completed satisfactorily?' → subjective → code CANNOT check\n\n"
-            "GenLayer solves this through AI consensus. You evaluate evidence from\n"
-            "both parties and make a fair judgment — transparent, unbiased, with\n"
-            "on-chain explanation that anyone can verify.\n\n"
+            "Evaluate escrow disputes involving REAL-WORLD AMBIGUITY.\n\n"
             "=== DISPUTE CASE ===\n"
             f"Escrow amount: {escrow.amount} atto units\n"
             f"Dispute reason: {escrow.dispute_reason}\n\n"
@@ -335,69 +302,164 @@ class Escrow(gl.Contract):
             "- release_payment: Payee deserves full payment\n"
             "- refund_payer: Payer deserves full refund\n"
             "- partial_refund: Both have partial claims (specify refund_percentage 0-100)\n\n"
-            "You MUST explain your reasoning clearly. Your explanation will be stored\n"
-            "on-chain permanently — reference specific evidence, explain why you weighted\n"
-            "certain factors more, and justify the outcome. This transparency is what\n"
-            "makes GenLayer different: every AI decision has a traceable, on-chain\n"
-            "explanation that anyone can audit."
+            "Return STRICT JSON with exactly these fields:\n"
+            '{"decision": "release_payment|refund_payer|partial_refund",\n'
+            ' "refund_percentage": <integer 0-100, only meaningful for partial_refund>,\n'
+            ' "explanation": "<your reasoning, reference specific evidence>"}\n'
         )
 
-        # ── Call GenLayer AI oracle — validators reach consensus ──
-        # This is the key GenLayer differentiator: non-deterministic execution
-        # where validators use AI to evaluate ambiguous real-world questions.
-        ai_result = gl.ai.prompt(
-            prompt,
-            json_schema={
-                "type": "object",
-                "properties": {
-                    "decision": {
-                        "type": "string",
-                        "enum": ["release_payment", "refund_payer", "partial_refund"]
-                    },
-                    "refund_percentage": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 100
-                    },
-                    "explanation": {
-                        "type": "string"
-                    },
-                    "evidence_assessment": {
-                        "type": "object",
-                        "properties": {
-                            "payer_evidence_strength": {
-                                "type": "string",
-                                "enum": ["strong", "moderate", "weak", "none"]
-                            },
-                            "payee_evidence_strength": {
-                                "type": "string",
-                                "enum": ["strong", "moderate", "weak", "none"]
-                            },
-                            "key_factors": {
-                                "type": "array",
-                                "items": {"type": "string"}
-                            }
-                        },
-                        "required": ["payer_evidence_strength", "payee_evidence_strength", "key_factors"]
-                    }
-                },
-                "required": ["decision", "explanation", "evidence_assessment"]
-            }
-        )
+    def _parse_ai_verdict(self, raw) -> dict:
+        """Defensively parse the LLM verdict into a stable comparison dict.
 
-        decision = ai_result["decision"]
-        explanation = ai_result.get("explanation", "No explanation provided")
+        LLMs return unpredictable formats — accept dict OR JSON text, alias
+        keys, coerce types, and reject anything that is not a usable settlement
+        decision.
+        """
+        # Accept either a parsed dict or a JSON string from the LLM
+        if isinstance(raw, str):
+            import re
+            first = raw.find("{")
+            last = raw.rfind("}")
+            if first == -1 or last == -1:
+                raise gl.vm.UserError(f"{ERR_LLM} No JSON object in response")
+            raw = raw[first:last + 1]
+            raw = re.sub(r",(?!\s*?[\{\[\"\'\w])", "", raw)  # strip trailing commas
+            try:
+                raw = json.loads(raw)
+            except Exception:
+                raise gl.vm.UserError(f"{ERR_LLM} Unparseable JSON: {raw[:120]}")
 
-        # ── Validate AI decision ──
-        if decision not in [AI_RELEASE, AI_REFUND, AI_PARTIAL]:
-            raise gl.UserError(f"{ERR_EXTERNAL} AI returned invalid decision: {decision}")
+        if not isinstance(raw, dict):
+            raise gl.vm.UserError(f"{ERR_LLM} Non-dict response: {type(raw)}")
+
+        # Key aliasing — LLMs sometimes use alternate names
+        decision = raw.get("decision")
+        if decision is None:
+            for alt in ("verdict", "outcome", "result", "ruling"):
+                if alt in raw:
+                    decision = raw[alt]
+                    break
+
+        if decision not in (AI_RELEASE, AI_REFUND, AI_PARTIAL):
+            raise gl.vm.UserError(f"{ERR_LLM} Invalid decision: {decision}")
+
+        explanation = str(raw.get("explanation", raw.get("reasoning", "No explanation provided")))
+
+        pct = 50
+        if decision == AI_PARTIAL:
+            raw_pct = raw.get("refund_percentage")
+            if raw_pct is None:
+                for alt in ("refund_pct", "percentage", "pct", "refund_percent"):
+                    if alt in raw:
+                        raw_pct = raw[alt]
+                        break
+            try:
+                pct = int(round(float(str(raw_pct).strip()))) if raw_pct is not None else 50
+            except (ValueError, TypeError):
+                raise gl.vm.UserError(f"{ERR_LLM} Non-numeric refund_percentage: {raw_pct}")
+            if pct < 0 or pct > 100:
+                raise gl.vm.UserError(f"{ERR_LLM} refund_percentage out of range: {pct}")
+
+        return {
+            "decision": decision,
+            "explanation": explanation,
+            "refund_percentage": pct,
+        }
+
+    def _handle_leader_error(self, leaders_res, run_eval) -> bool:
+        """Canonical error handler: classify leader errors so validators
+        know how to compare them. LLM errors always disagree (force rotation)."""
+        leader_msg = leaders_res.message if hasattr(leaders_res, "message") else ""
+        try:
+            run_eval()
+            return False  # Leader errored, validator succeeded — disagree
+        except gl.vm.UserError as e:
+            validator_msg = e.message if hasattr(e, "message") else str(e)
+            # Deterministic errors: must match exactly
+            if validator_msg.startswith(ERR_EXPECTED) or validator_msg.startswith(ERR_EXTERNAL):
+                return validator_msg == leader_msg
+            # Transient: agree if both hit transient failure
+            if validator_msg.startswith(ERR_TRANSIENT) and leader_msg.startswith(ERR_TRANSIENT):
+                return True
+            # LLM or unknown: disagree — forces consensus retry
+            return False
+        except Exception:
+            return False
+
+    def _evaluate_dispute(self, escrow: EscrowState) -> dict:
+        """🔥 GenLayer consensus path for AI escrow resolution.
+
+        Leader and validator BOTH independently run the same nondeterministic
+        LLM prompt. The validator does NOT trust the leader's answer — it reruns
+        the task and compares the substantive decision:
+
+          * `decision` must match EXACTLY (settlement outcome is binary-ish)
+          * `refund_percentage` must agree within ±PCT_TOLERANCE (partial cases)
+
+        If they disagree, consensus fails and rotates/retries. This is the
+        equivalence principle that makes the AI verdict reproducible across
+        validators instead of trusting a single leader.
+        """
+        prompt = self._build_dispute_prompt(escrow)
+
+        def run_eval() -> dict:
+            raw = gl.nondet.exec_prompt(prompt, response_format="json")
+            return self._parse_ai_verdict(raw)
+
+        def validator_fn(leaders_res: gl.vm.Result) -> bool:
+            # Leader errored — classify and decide whether to agree
+            if not isinstance(leaders_res, gl.vm.Return):
+                return self._handle_leader_error(leaders_res, run_eval)
+
+            try:
+                validator_result = run_eval()
+            except gl.vm.UserError:
+                return self._handle_leader_error(leaders_res, run_eval)
+            except Exception:
+                return False
+
+            leader = leaders_res.calldata
+
+            # Settlement outcome must converge exactly
+            if leader["decision"] != validator_result["decision"]:
+                return False
+
+            # For partial refunds, the split must be close (tolerance)
+            if leader["decision"] == AI_PARTIAL:
+                lp = int(leader["refund_percentage"])
+                vp = int(validator_result["refund_percentage"])
+                if abs(lp - vp) > PCT_TOLERANCE:
+                    return False
+
+            return True
+
+        return gl.vm.run_nondet_unsafe(run_eval, validator_fn)
+
+    @gl.public.write
+    def resolve_with_ai(self, payer: Address) -> None:
+        """🔥 GenLayer-native: AI consensus resolves dispute with explanation.
+
+        Runs the dispute evaluation through GenLayer's nondeterministic
+        execution + equivalence principle (leader + independent validator).
+        Any party can trigger resolution — no human gatekeeper needed.
+
+        payer: Address of the payer whose escrow to resolve
+        """
+        sender = gl.message.sender_account
+        escrow = self.escrows[payer]
+        self._only_party(escrow)
+        self._require_status(escrow, "DISPUTED")
+
+        # ── Consensus path: leader + validator agree on the verdict ──
+        verdict = self._evaluate_dispute(escrow)
+        decision = verdict["decision"]
+        explanation = verdict["explanation"]
 
         # ── Store AI decision + explanation on-chain ──
-        # This is the transparency differentiator — every decision has a traceable reason.
         escrow.ai_decision = decision
         escrow.ai_explanation = explanation
 
-        # ── Execute outcome based on AI decision ──
+        # ── Execute outcome based on consensus decision ──
         if decision == AI_RELEASE:
             fee = (escrow.amount * self.fee_bp) // u256(10000)
             release = escrow.amount - fee
@@ -416,9 +478,7 @@ class Escrow(gl.Contract):
                 escrow.payer, escrow.amount, explanation))
 
         elif decision == AI_PARTIAL:
-            pct = ai_result.get("refund_percentage", 50)
-            if pct < 0 or pct > 100:
-                pct = 50  # fallback to equal split if AI gives invalid percentage
+            pct = verdict["refund_percentage"]
             escrow.partial_refund_pct = u256(pct)
 
             payer_refund = (escrow.amount * u256(pct)) // u256(100)

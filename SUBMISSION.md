@@ -103,18 +103,18 @@ FUNDED ───────────────────┼─── CAN
 
 ### AI Decision Output (stored on-chain)
 
+The LLM verdict is produced through the equivalence principle and parsed into:
+
 ```json
 {
   "decision": "partial_refund",
   "refund_percentage": 40,
-  "explanation": "60% of goods delivered satisfactorily. 40% missing due to stock-out. Payer gets 40% refund.",
-  "evidence_assessment": {
-    "payer_evidence_strength": "moderate",
-    "payee_evidence_strength": "moderate",
-    "key_factors": ["60pct_confirmed_delivery", "40pct_stock_out", "both_partial_claims"]
-  }
+  "explanation": "60% of goods delivered satisfactorily. 40% missing due to stock-out. Payer gets 40% refund."
 }
 ```
+
+Validators independently rerun the same prompt and must agree on `decision`
+(exact) and `refund_percentage` (within ±10) for consensus.
 
 ## 🧪 Testing — 24+ Tests, < 1 Second
 
@@ -175,11 +175,12 @@ genlayer client deploy contracts/escrow.py --args '[50]' --network testnet
 ## 🏗️ Technical Depth
 
 - **Storage:** `TreeMap[Address, EscrowState]`, `DynArray[EventLog]`, `u256`
-- **SDK:** `@gl.public.view`, `@gl.public.write`, `gl.message`, `gl.transfer`, `gl.block.time`, `gl.ai.prompt`
-- **Error handling:** Classified `[EXPECTED]` (user errors) and `[EXTERNAL]` (system/AI errors)
+- **SDK:** `@gl.public.view`, `@gl.public.write`, `gl.message`, `gl.transfer`, `gl.block.time`, `gl.nondet.exec_prompt`, `gl.vm.run_nondet_unsafe`
+- **Consensus path:** Dispute resolution runs through GenLayer's REAL nondeterministic + equivalence-principle machinery — `gl.vm.run_nondet_unsafe(leader_fn, validator_fn)` where the validator independently reruns the same prompt and compares the `decision` field exactly + `refund_percentage` within ±10. NOT a single leader-only LLM call.
+- **Error handling:** Classified `[EXPECTED]` / `[EXTERNAL]` / `[TRANSIENT]` / `[LLM_ERROR]` prefixes for deterministic validator comparison
 - **GenLayer-native:** AI consensus replaces human arbiter — non-deterministic dispute resolution
 - **Evidence system:** Both parties submit on-chain — AI evaluates BOTH sides
-- **Transparency:** Decision + explanation + evidence_assessment stored permanently on-chain
+- **Transparency:** Decision + explanation stored permanently on-chain
 - **Gas efficient:** O(1) lookups, paginated event queries
 
 ## 🎯 Why This Matters
@@ -250,7 +251,7 @@ git push -u origin main
 
 ## ✅ Submission Checklist
 
-- [x] Contract is GenLayer-native (uses `gl.ai.prompt` for consensus)
+- [x] Contract is GenLayer-native (uses `gl.nondet.exec_prompt` + `gl.vm.run_nondet_unsafe` equivalence principle for consensus)
 - [x] No human arbiter — AI consensus handles disputes
 - [x] Both parties can submit evidence on-chain
 - [x] AI decision + explanation stored permanently on-chain
