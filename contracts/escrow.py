@@ -1,5 +1,8 @@
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
+import json
+import re
+from dataclasses import dataclass
 from genlayer import *
 
 # ─────────────────────────────────────────────────────────────
@@ -49,6 +52,35 @@ AI_PARTIAL = "partial_refund"
 
 # Tolerance for partial-refund percentage across leader/validator LLM runs
 PCT_TOLERANCE = 10
+
+
+def _to_int(value) -> int:
+    """Deterministically parse a value to int.
+
+    Avoids float() — which is non-deterministic in GenVM and breaks
+    validator consensus. Handles int, and strings like '40', '40.0',
+    '40.9' by taking the integer part (truncation, deterministic)."""
+    s = str(value).strip()
+    if "." in s:
+        s = s.split(".", 1)[0]
+    return int(s)
+
+
+def _to_addr(value) -> Address:
+    """Coerce any address-like value to a proper Address.
+
+    The calldata layer decodes addresses as raw bytes; the storage layer
+    needs a real Address (with .as_bytes). This normalizes both."""
+    if isinstance(value, Address):
+        return value
+    if isinstance(value, (bytes, bytearray)):
+        return Address(bytes(value))
+    if isinstance(value, str):
+        return Address(value)
+    # Fallback: objects exposing as_bytes (Address from another SDK path)
+    if hasattr(value, 'as_bytes'):
+        return Address(value.as_bytes)
+    return Address(bytes(value))
 
 
 @allow_storage
@@ -104,30 +136,30 @@ class Escrow(gl.Contract):
         self.events.append(EventLog(
             name=name,
             data=data,
-            block_time=gl.block.time.isoformat(),
+            block_time=gl.message_raw['datetime'],
         ))
 
     def _only_payer(self, escrow: EscrowState) -> None:
-        if gl.message.sender_account != escrow.payer:
-            raise gl.UserError(f"{ERR_EXPECTED} Only the payer can call this")
+        if _to_addr(gl.message.sender_address) != escrow.payer:
+            raise gl.vm.UserError(f"{ERR_EXPECTED} Only the payer can call this")
 
     def _only_party(self, escrow: EscrowState) -> None:
         """Check caller is payer or payee — NO arbiter check.
         In GenLayer-native escrow, only the two transacting parties matter."""
-        sender = gl.message.sender_account
+        sender = _to_addr(gl.message.sender_address)
         if sender not in (escrow.payer, escrow.payee):
-            raise gl.UserError(f"{ERR_EXPECTED} Not a party to this escrow")
+            raise gl.vm.UserError(f"{ERR_EXPECTED} Not a party to this escrow")
 
     def _require_status(self, escrow: EscrowState, expected: str) -> None:
         if escrow.status != expected:
-            raise gl.UserError(f"{ERR_EXPECTED} Expected status {expected}, got {escrow.status}")
+            raise gl.vm.UserError(f"{ERR_EXPECTED} Expected status {expected}, got {escrow.status}")
 
     # ── Public view methods ─────────────────────────
 
     @gl.public.view
     def get_escrow(self, payer: Address) -> dict:
         """Return full escrow state — includes evidence + AI explanation."""
-        e = self.escrows[payer]
+        e = self.escrows[_to_addr(payer)]
         return {
             "payer": str(e.payer),
             "payee": str(e.payee),
@@ -145,16 +177,16 @@ class Escrow(gl.Contract):
 
     @gl.public.view
     def exists(self, payer: Address) -> bool:
-        return payer in self.escrows
+        return _to_addr(payer) in self.escrows
 
     @gl.public.view
     def get_event_count(self) -> u256:
         return len(self.events)
 
     @gl.public.view
-    def get_events(self, offset: u256, limit: u256) -> DynArray[dict]:
+    def get_events(self, offset: u256, limit: u256) -> list:
         """Paginated event log."""
-        result: DynArray[dict]
+        result = []
         end = min(offset + limit, len(self.events))
         i = offset
         while i < end:
@@ -173,15 +205,16 @@ class Escrow(gl.Contract):
     def deposit(self, payee: Address) -> None:
         """Payer deposits native tokens to fund an escrow.
         No arbiter parameter — AI consensus handles disputes."""
-        sender = gl.message.sender_account
+        sender = _to_addr(gl.message.sender_address)
+        payee = _to_addr(payee)
         amount = gl.message.value
 
         if amount == 0:
-            raise gl.UserError(f"{ERR_EXPECTED} Zero deposit not allowed")
+            raise gl.vm.UserError(f"{ERR_EXPECTED} Zero deposit not allowed")
         if payee == sender:
-            raise gl.UserError(f"{ERR_EXPECTED} Payer cannot be payee")
+            raise gl.vm.UserError(f"{ERR_EXPECTED} Payer cannot be payee")
         if sender in self.escrows:
-            raise gl.UserError(f"{ERR_EXPECTED} Payer already has an active escrow")
+            raise gl.vm.UserError(f"{ERR_EXPECTED} Payer already has an active escrow")
 
         self.escrows[sender] = EscrowState(
             payer=sender,
@@ -192,7 +225,7 @@ class Escrow(gl.Contract):
             dispute_reason="",
             payer_evidence="",
             payee_evidence="",
-            created_at=gl.block.time.isoformat(),
+            created_at=gl.message_raw['datetime'],
             ai_decision="",
             ai_explanation="",
             partial_refund_pct=u256(0),
@@ -203,7 +236,9 @@ class Escrow(gl.Contract):
     @gl.public.write
     def approve(self) -> None:
         """Payer releases funds to payee (minus fee). Happy path."""
-        sender = gl.message.sender_account
+        sender = _to_addr(gl.message.sender_address)
+        if sender not in self.escrows:
+            raise gl.vm.UserError(f"{ERR_EXPECTED} Only the payer can call this")
         escrow = self.escrows[sender]
         self._only_payer(escrow)
         self._require_status(escrow, "FUNDED")
@@ -223,7 +258,9 @@ class Escrow(gl.Contract):
     @gl.public.write
     def cancel(self) -> None:
         """Payer cancels escrow and gets full refund. Only before dispute."""
-        sender = gl.message.sender_account
+        sender = _to_addr(gl.message.sender_address)
+        if sender not in self.escrows:
+            raise gl.vm.UserError(f"{ERR_EXPECTED} Only the payer can call this")
         escrow = self.escrows[sender]
         self._only_payer(escrow)
         self._require_status(escrow, "FUNDED")
@@ -242,7 +279,8 @@ class Escrow(gl.Contract):
         payer: Address of the payer whose escrow to dispute
         reason: Human-readable dispute reason
         """
-        sender = gl.message.sender_account
+        sender = _to_addr(gl.message.sender_address)
+        payer = _to_addr(payer)
         escrow = self.escrows[payer]
         self._only_party(escrow)
         self._require_status(escrow, "FUNDED")
@@ -259,7 +297,8 @@ class Escrow(gl.Contract):
         payer:    Address of the payer whose escrow this evidence belongs to
         evidence: JSON string describing this party's evidence
         """
-        sender = gl.message.sender_account
+        sender = _to_addr(gl.message.sender_address)
+        payer = _to_addr(payer)
         escrow = self.escrows[payer]
         self._only_party(escrow)
         self._require_status(escrow, "DISPUTED")
@@ -317,7 +356,6 @@ class Escrow(gl.Contract):
         """
         # Accept either a parsed dict or a JSON string from the LLM
         if isinstance(raw, str):
-            import re
             first = raw.find("{")
             last = raw.rfind("}")
             if first == -1 or last == -1:
@@ -354,7 +392,7 @@ class Escrow(gl.Contract):
                         raw_pct = raw[alt]
                         break
             try:
-                pct = int(round(float(str(raw_pct).strip()))) if raw_pct is not None else 50
+                pct = _to_int(raw_pct) if raw_pct is not None else 50
             except (ValueError, TypeError):
                 raise gl.vm.UserError(f"{ERR_LLM} Non-numeric refund_percentage: {raw_pct}")
             if pct < 0 or pct > 100:
@@ -445,7 +483,8 @@ class Escrow(gl.Contract):
 
         payer: Address of the payer whose escrow to resolve
         """
-        sender = gl.message.sender_account
+        sender = _to_addr(gl.message.sender_address)
+        payer = _to_addr(payer)
         escrow = self.escrows[payer]
         self._only_party(escrow)
         self._require_status(escrow, "DISPUTED")
@@ -504,4 +543,4 @@ class Escrow(gl.Contract):
         """Collect accumulated fees from contract balance."""
         balance = gl.contract_balance
         if balance > 0:
-            gl.transfer(gl.message.sender_account, balance, on="accepted")
+            gl.transfer(_to_addr(gl.message.sender_address), balance, on="accepted")

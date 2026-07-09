@@ -28,7 +28,7 @@ import pytest
 
 def test_deposit_creates_escrow(direct_vm, direct_deploy, direct_alice, direct_bob):
     """Payer deposits — escrow in FUNDED state. No arbiter needed."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 5_000_000_000_000_000_000
@@ -49,7 +49,7 @@ def test_deposit_creates_escrow(direct_vm, direct_deploy, direct_alice, direct_b
 
 def test_deposit_zero_reverts(direct_vm, direct_deploy, direct_alice, direct_bob):
     """Zero deposit should fail."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.value = 0
 
@@ -59,7 +59,7 @@ def test_deposit_zero_reverts(direct_vm, direct_deploy, direct_alice, direct_bob
 
 def test_deposit_self_as_payee_reverts(direct_vm, direct_deploy, direct_alice):
     """Payer == payee should fail."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -70,7 +70,7 @@ def test_deposit_self_as_payee_reverts(direct_vm, direct_deploy, direct_alice):
 
 def test_deposit_duplicate_reverts(direct_vm, direct_deploy, direct_alice, direct_bob):
     """Double deposit by same payer should fail."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -86,7 +86,7 @@ def test_deposit_duplicate_reverts(direct_vm, direct_deploy, direct_alice, direc
 
 def test_approve_releases_to_payee(direct_vm, direct_deploy, direct_alice, direct_bob):
     """After approve, payee receives funds minus fee."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -102,7 +102,7 @@ def test_approve_releases_to_payee(direct_vm, direct_deploy, direct_alice, direc
 
 def test_approve_non_payer_reverts(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
     """Non-payer cannot approve."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -115,7 +115,7 @@ def test_approve_non_payer_reverts(direct_vm, direct_deploy, direct_alice, direc
 
 def test_approve_wrong_status_reverts(direct_vm, direct_deploy, direct_alice, direct_bob):
     """Cannot approve after already released."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -132,7 +132,7 @@ def test_approve_wrong_status_reverts(direct_vm, direct_deploy, direct_alice, di
 
 def test_cancel_refunds_payer(direct_vm, direct_deploy, direct_alice, direct_bob):
     """Cancel returns full amount to payer."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -147,7 +147,7 @@ def test_cancel_refunds_payer(direct_vm, direct_deploy, direct_alice, direct_bob
 
 def test_cancel_after_approve_reverts(direct_vm, direct_deploy, direct_alice, direct_bob):
     """Cannot cancel a released escrow."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -164,7 +164,7 @@ def test_cancel_after_approve_reverts(direct_vm, direct_deploy, direct_alice, di
 
 def test_raise_dispute_by_payer(direct_vm, direct_deploy, direct_alice, direct_bob):
     """🔥 Payer raises dispute — takes payer address + reason. No arbiter."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -180,7 +180,7 @@ def test_raise_dispute_by_payer(direct_vm, direct_deploy, direct_alice, direct_b
 
 def test_raise_dispute_by_payee(direct_vm, direct_deploy, direct_alice, direct_bob):
     """🔥 Payee can also raise dispute — both parties have equal access."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -196,7 +196,7 @@ def test_raise_dispute_by_payee(direct_vm, direct_deploy, direct_alice, direct_b
 
 def test_raise_dispute_non_party_reverts(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
     """Non-party cannot raise dispute."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -211,7 +211,7 @@ def test_raise_dispute_non_party_reverts(direct_vm, direct_deploy, direct_alice,
 
 def test_submit_evidence_payer(direct_vm, direct_deploy, direct_alice, direct_bob):
     """🔥 Payer submits evidence on-chain — AI will evaluate this."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -231,7 +231,7 @@ def test_submit_evidence_payer(direct_vm, direct_deploy, direct_alice, direct_bo
 
 def test_submit_evidence_payee(direct_vm, direct_deploy, direct_alice, direct_bob):
     """🔥 Payee submits evidence on-chain — AI sees BOTH sides."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -252,7 +252,7 @@ def test_submit_evidence_payee(direct_vm, direct_deploy, direct_alice, direct_bo
 def test_submit_evidence_both_sides(direct_vm, direct_deploy, direct_alice, direct_bob):
     """🔥 Both parties submit evidence — AI evaluates BOTH sides fairly.
     This is what traditional blockchains CANNOT do."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -278,7 +278,7 @@ def test_submit_evidence_both_sides(direct_vm, direct_deploy, direct_alice, dire
 
 def test_submit_evidence_non_party_reverts(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
     """Non-party cannot submit evidence."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -294,7 +294,7 @@ def test_submit_evidence_non_party_reverts(direct_vm, direct_deploy, direct_alic
 
 def test_submit_evidence_before_dispute_reverts(direct_vm, direct_deploy, direct_alice, direct_bob):
     """Cannot submit evidence before dispute is raised."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -312,7 +312,7 @@ def test_ai_resolve_release_payment(direct_vm, direct_deploy, direct_alice, dire
     Simulates: 'Was work completed?' → AI says YES, payee deserves payment.
     Traditional blockchain: arbiter clicks yes/no. GenLayer: AI evaluates evidence.
     """
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -353,7 +353,7 @@ def test_ai_resolve_refund_payer(direct_vm, direct_deploy, direct_alice, direct_
     """🔥 GenLayer consensus: AI resolves dispute → refund_payer with explanation.
     Simulates: 'Was work completed?' → AI says NO, payer deserves refund.
     """
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -395,7 +395,7 @@ def test_ai_resolve_partial_refund(direct_vm, direct_deploy, direct_alice, direc
     Simulates: 'Is partial delivery acceptable?' → AI says 60% delivered, 40% refund.
     This is the kind of nuanced decision traditional blockchains CANNOT make.
     """
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -435,7 +435,7 @@ def test_ai_resolve_partial_refund(direct_vm, direct_deploy, direct_alice, direc
 
 def test_ai_resolve_non_party_reverts(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
     """Non-party cannot trigger AI resolution."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -460,7 +460,7 @@ def test_ai_resolve_non_party_reverts(direct_vm, direct_deploy, direct_alice, di
 
 def test_ai_resolve_wrong_status_reverts(direct_vm, direct_deploy, direct_alice, direct_bob):
     """Cannot AI-resolve an escrow that is not in DISPUTED status."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -483,7 +483,7 @@ def test_ai_resolve_wrong_status_reverts(direct_vm, direct_deploy, direct_alice,
 
 def test_ai_resolve_logs_event_with_explanation(direct_vm, direct_deploy, direct_alice, direct_bob):
     """🔥 AI resolution logs AI_RESOLVE event with decision + explanation."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -519,7 +519,7 @@ def test_ai_resolve_logs_event_with_explanation(direct_vm, direct_deploy, direct
 
 def test_ai_resolve_stores_decision_and_explanation(direct_vm, direct_deploy, direct_alice, direct_bob):
     """🔥 AI decision + explanation stored in escrow state — on-chain transparency."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -559,7 +559,7 @@ def test_ai_resolve_without_evidence(direct_vm, direct_deploy, direct_alice, dir
     """🔥 AI can resolve even when no evidence submitted — prompt includes 'No evidence'.
     Traditional arbiter: can't decide without evidence → deadlock.
     GenLayer AI: evaluates what's available → makes best judgment."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -593,7 +593,7 @@ def test_ai_resolve_without_evidence(direct_vm, direct_deploy, direct_alice, dir
 
 def test_events_logged(direct_vm, direct_deploy, direct_alice, direct_bob):
     """Events should be recorded for deposit, dispute, evidence, resolve."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -606,7 +606,7 @@ def test_events_logged(direct_vm, direct_deploy, direct_alice, direct_bob):
 
 def test_evidence_event_logged(direct_vm, direct_deploy, direct_alice, direct_bob):
     """🔥 Evidence submission should log EVIDENCE event."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -628,7 +628,7 @@ def test_evidence_event_logged(direct_vm, direct_deploy, direct_alice, direct_bo
 
 def test_exists_check(direct_vm, direct_deploy, direct_alice, direct_bob):
     """exists() should return True/False correctly."""
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -650,7 +650,7 @@ def test_ai_resolve_uses_nondet_consensus_path(direct_vm, direct_deploy, direct_
     strategy); this test confirms the leader path + settlement still works
     end-to-end through the nondeterministic wrapper.
     """
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000
@@ -682,7 +682,7 @@ def test_ai_resolve_accepts_json_string_response(direct_vm, direct_deploy, direc
     _parse_ai_verdict() must handle both. This is LLM resilience — LLMs don't
     always comply with response_format='json'.
     """
-    contract = direct_deploy("contracts/escrow.py", [u256(50)])
+    contract = direct_deploy("contracts/escrow.py", 50)
     direct_vm.sender = direct_alice
     direct_vm.deal(direct_alice, 10_000_000_000_000_000_000)
     direct_vm.value = 1_000_000_000_000_000_000

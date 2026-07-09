@@ -3,6 +3,8 @@
 > **Build, Validate, Test, Deploy** — GenLayer intelligent contracts using Claude Code + GenLayer Skills plugin.
 >
 > *Zero manual Python coding. Full AI collaboration loop.*
+>
+> This contract follows the GenLayer equivalence principle: validators independently re-execute nondeterministic steps and compare outputs for consensus.
 
 ---
 
@@ -21,272 +23,181 @@ Most smart contract development is:
 
 ---
 
-## 🔥 Why GenLayer is Different from Traditional Blockchains
+## 🔥 The Contract: AI-Assisted Decision Contract (MINIMAL)
 
-This contract demonstrates the **fundamental difference** between GenLayer and traditional blockchains (Ethereum, Solana, etc.):
-
-### Traditional Blockchain Escrow (Ethereum/Solidity)
+The **simplest GenLayer intelligent contract that WORKS**:
 
 ```
-payer → payee → human arbiter
+Input (string) → AI evaluates → Decision saved on-chain
 ```
 
-- Arbiter decides: `release()` or `refund()` — **deterministic boolean**
-- Arbiter can be: **bribed, absent, biased, expensive**
-- `"Was work completed?"` → **code CANNOT answer this**
-- No on-chain explanation for **WHY** a decision was made
-- Single point of failure — if arbiter disappears, funds are locked
+1. **Input** → a string (task description / question)
+2. **AI** → evaluates through GenLayer consensus (leader + validator)
+3. **Output** → `"approved"` or `"rejected"` — saved permanently on-chain
 
-### GenLayer-Native Escrow (this contract)
+> ⚠️ **No token transfers, no balances, no msg.sender, no custom errors, no escrow logic.**
+> Pure AI-assisted decision recording — safe, simple, and GenLayer-native.
 
-```
-payer → payee → AI consensus
-```
+### Why This Works
 
-- Both parties submit **evidence on-chain** — transparent, auditable
-- AI evaluates **BOTH sides** through validator consensus — fair, unbiased
-- `"Was work completed?"` → **AI CAN answer this, with reasoning**
-- Decision + explanation + evidence assessment stored **permanently on-chain**
-- No human gatekeeper — **any party can trigger resolution**
-- No single point of failure — consensus is distributed
+This contract demonstrates the **core GenLayer capability** that traditional blockchains cannot provide: **AI-mediated consensus on subjective decisions**.
 
-### The Key Insight
-
-Traditional smart contracts handle **deterministic** conditions:
-- ✅ `"Was a hash submitted?"` → yes/no → code can check
-- ✅ `"Is the balance > 0?"` → yes/no → code can check
-- ❌ `"Was work completed satisfactorily?"` → subjective → **code CANNOT check**
-- ❌ `"Did the seller deliver what was promised?"` → ambiguous → **code CANNOT check**
-
-GenLayer's AI consensus handles exactly these **ambiguous, real-world questions** — the ones that traditional blockchains simply cannot resolve.
+| Question | Traditional Blockchain | GenLayer (this contract) |
+|----------|----------------------|--------------------------|
+| `"Was a hash submitted?"` | ✅ Code can check (deterministic) | ✅ Code can check |
+| `"Is the balance > 0?"` | ✅ Code can check (deterministic) | ✅ Code can check |
+| `"Is this task clear and feasible?"` | ❌ Code CANNOT answer (subjective) | ✅ **AI CAN answer, with reasoning** |
+| `"Should this submission be approved?"` | ❌ Code CANNOT answer (ambiguous) | ✅ **AI evaluates through validator consensus** |
 
 ---
 
 ## 📦 What We Built
 
-### 1️⃣ GenLayer-Native Escrow (`contracts/escrow.py`)
-
-A production-grade escrow on GenLayer where **AI consensus replaces the human arbiter**:
+### AI-Assisted Decision Contract (`contracts/decision.py`)
 
 | Feature | Description | Why It Matters |
 |---------|-------------|----------------|
-| **Deposit** | Payer locks native tokens (no arbiter param) | Simplified — AI handles disputes |
-| **Approve** | Payer releases to payee (minus fee) | Trustless settlement |
-| **Cancel** | Payer gets full refund | Safety valve |
-| **Dispute** | Any party raises dispute (payer address + reason) | Equal access — no arbiter gatekeeper |
-| **Evidence** | Both parties submit evidence on-chain | 🔥 AI sees BOTH sides — fair evaluation |
-| **AI Resolve** | AI consensus evaluates evidence → decision + explanation | 🔥 GenLayer-native — replaces human arbiter |
-| **Event Logging** | All state changes + evidence + AI decisions recorded | 🔥 Full audit trail |
-| **Fee Collection** | Basis-point fee on release | Monetization built-in |
-| **Error Classification** | `[EXPECTED]` / `[EXTERNAL]` prefixes | GenLayer consensus safety |
+| **One method** | `evaluate(description)` — input, AI, output | Minimal & focused |
+| **AI Consensus** | Leader + validator equivalence principle | 🔥 GenLayer-native |
+| **Decision Storage** | `approved` / `rejected` stored on-chain | Permanent, auditable |
+| **AI Explanation** | Reasoning stored with the decision | 🔥 Full transparency |
+| **LLM Resilience** | Defensive parsing, key aliasing, type coercion | Handles unpredictable LLM formats |
 
 #### State Machine
 
 ```
-                          ┌─── RELEASED (payer approves — happy path)
-                          │
-FUNDED ───────────────────┼─── CANCELLED (payer cancels — refund)
-                          │
-                          └─── DISPUTED ──► AI evaluates evidence ──► RELEASED (AI: release_payment)
-                                           │                        └─► CANCELLED (AI: refund_payer)
-                                           │                        └─► RELEASED  (AI: partial_refund — split)
-```
-
-#### AI Decision Output (stored on-chain)
-
-The LLM verdict is produced through the equivalence principle and parsed into:
-
-```json
-{
-  "decision": "partial_refund",
-  "refund_percentage": 40,
-  "explanation": "60% of goods delivered satisfactorily. 40% missing due to stock-out. Payer gets 40% refund."
-}
-```
-
-Validators independently rerun the same prompt and must agree on `decision`
-(exact) and `refund_percentage` (within ±10) for consensus.
-
-### 2️⃣ Direct Mode Tests (`tests/direct/test_escrow.py`)
-
-**24 test cases** covering:
-
-- ✅ Deposit (happy path, zero reject, self-payee reject, duplicate reject)
-- ✅ Approve (release, non-payer reject, wrong-status reject)
-- ✅ Cancel (refund, post-approve reject)
-- ✅ Dispute (payer raises, payee raises, non-party reject)
-- ✅ Evidence (payer submits, payee submits, both sides, non-party reject, before-dispute reject)
-- ✅ AI Dispute Resolution (release_payment, refund_payer, partial_refund, non-party reject, wrong-status reject, event logging, decision+explanation storage, no-evidence fallback)
-- ✅ Events (deposit logged, evidence logged)
-- ✅ View helpers (`exists()`)
-
-### 3️⃣ AI Collaboration Loop — *The "Vibe Layer"*
-
-```
-Prompt 1: "Create escrow with deposit/approve/cancel"
-   → AI generates base contract
-
-Prompt 2: "Improve by adding dispute resolution, logging events, optimizing gas"
-   → AI adds: raise_dispute(), DynArray[EventLog], error classification
-
-Prompt 3: "Transform into GenLayer-native contract — replace arbiter with AI consensus"
-   → AI adds:
-       • 🔥 Remove arbiter entirely — AI consensus IS the arbiter
-       • 🔥 submit_evidence() — both parties present their side on-chain
-       • 🔥 resolve_with_ai() — any party can trigger, no human gatekeeper
-       • 🔥 AI prompt designed for real-world ambiguity ("was work completed?")
-       • 🔥 evidence_assessment in AI output — structured reasoning
-       • 🔥 Full explanation stored on-chain for transparency
-   → This demonstrates WHY GenLayer is different from traditional blockchains
+evaluate(description) ──► AI consensus ──► APPROVED  (saved on-chain)
+                                    └──► REJECTED  (saved on-chain)
 ```
 
 ---
 
-## 🚀 Full Demo Flow (For Judges)
+## 🧬 The GenLayer Consensus Path
 
-### Step 1 — Prompt → Contract Generated
+This is the **critical part** that makes this a real GenLayer contract — not just a single leader LLM call.
 
 ```
-claude "Write a GenLayer escrow contract where AI consensus replaces the human arbiter"
+evaluate(description)
+  └─ _evaluate(description)
+       └─ gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
+            │
+            ├─ leader_fn:
+            │     gl.nondet.exec_prompt(prompt, response_format="json")
+            │     _parse_verdict(raw) -> {decision, explanation}
+            │
+            └─ validator_fn(leaders_res):
+                  independently reruns the SAME prompt
+                  compares:
+                    * decision must match EXACTLY (the substantive outcome)
+                  -> agree ONLY if decision converges
+                  -> otherwise consensus fails and rotates/retries
 ```
 
-🤖 **Result:** `contracts/escrow.py` — GenLayer-native contract with:
-- No arbiter parameter — AI handles disputes
-- `submit_evidence()` for both parties
-- `resolve_with_ai()` using `gl.nondet.exec_prompt()` + `gl.vm.run_nondet_unsafe()` equivalence principle
-- Decision + explanation stored on-chain
+### Why this is a real consensus path
 
-### Step 2 — Auto Validation (genvm-lint)
+| Requirement | How it's met |
+|---|---|
+| **Supported nondeterministic call** | `gl.nondet.exec_prompt(prompt, response_format="json")` |
+| **Equivalence principle** | `gl.vm.run_nondet_unsafe(leader_fn, validator_fn)` |
+| **Validator does NOT trust the leader** | Validator independently reruns the same prompt and compares the `decision` field |
+| **Field-level comparison (not schema-only)** | `decision` exact match |
+| **Deterministic prompt** | Built from the input string via `_build_prompt()` — leader and validator build the SAME prompt |
+| **LLM resilience** | `_parse_verdict()` accepts dict OR JSON string, aliases keys, coerces types |
+| **Pinned runner** | `# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }` (no `test`/`latest` aliases) |
 
-```bash
-genvm-lint check contracts/escrow.py
+---
+
+## 📁 Project Structure
+
 ```
-
-### Step 3 — AI Generates & Runs Tests
-
-```bash
-pytest tests/direct/ -v
-```
-
-**Expected output:**
-```
-✓ test_deposit_creates_escrow
-✓ test_deposit_zero_reverts
-✓ test_deposit_self_as_payee_reverts
-✓ test_deposit_duplicate_reverts
-✓ test_approve_releases_to_payee
-✓ test_approve_non_payer_reverts
-✓ test_approve_wrong_status_reverts
-✓ test_cancel_refunds_payer
-✓ test_cancel_after_approve_reverts
-✓ test_raise_dispute_by_payer
-✓ test_raise_dispute_by_payee
-✓ test_raise_dispute_non_party_reverts
-✓ test_submit_evidence_payer
-✓ test_submit_evidence_payee
-✓ test_submit_evidence_both_sides
-✓ test_submit_evidence_non_party_reverts
-✓ test_submit_evidence_before_dispute_reverts
-✓ test_ai_resolve_release_payment
-✓ test_ai_resolve_refund_payer
-✓ test_ai_resolve_partial_refund
-✓ test_ai_resolve_non_party_reverts
-✓ test_ai_resolve_wrong_status_reverts
-✓ test_ai_resolve_logs_event_with_explanation
-✓ test_ai_resolve_stores_decision_and_explanation
-✓ test_ai_resolve_without_evidence
-✓ test_events_logged
-✓ test_evidence_event_logged
-✓ test_exists_check
-
-24+ passed in <1s
-```
-
-### Step 4 — Deploy via GenLayer CLI
-
-```bash
-genlayer client deploy contracts/escrow.py --args '[50]' --network testnet
+VibeFlow — AI Smart Contract Builder on GenLayer/
+├── contracts/
+│   └── decision.py          # AI-Assisted Decision Contract (GenLayer-native, minimal)
+├── tests/
+│   └── direct/
+│       ├── conftest.py       # Shared test fixtures (genlayer_test plugin)
+│       └── test_decision.py  # Direct-mode tests (fast, in-memory)
+├── requirements.txt          # genlayer-test, genvm-linter, pytest
+├── README.md                # This file
+└── SUBMISSION.md            # Portal submission guide
 ```
 
 ---
 
-## 🔧 How to Run This Yourself
+## 🚀 Getting Started
 
 ### Prerequisites
 
-```bash
-# 1. Python 3.10+
-python --version
+- Python 3.11+
+- pip
 
-# 2. Install GenLayer tools
-pip install genvm-linter genlayer-test pytest
+### Install Dependencies
+
+```bash
+pip install -r requirements.txt
 ```
 
-### Validate
+### Lint the Contract
 
 ```bash
-genvm-lint check contracts/escrow.py
+genvm-lint check contracts/decision.py
 ```
 
-### Test
+### Run Tests
 
 ```bash
+# Direct-mode tests (fast, in-memory, no server)
+pytest tests/direct/test_decision.py -v
+
+# All tests
 pytest tests/direct/ -v
 ```
 
 ### Deploy
 
+Use the GenLayer CLI to deploy the contract:
+
 ```bash
-genlayer client deploy contracts/escrow.py --args '[50]' --network testnet
+genlayer deploy contracts/decision.py
 ```
 
 ---
 
-## 🏗️ Technical Depth
+## 🧪 Testing Strategy
 
-- **Storage:** `TreeMap[Address, EscrowState]`, `DynArray[EventLog]`, `u256`
-- **SDK:** `@gl.public.view`, `@gl.public.write`, `gl.message`, `gl.transfer`, `gl.block.time`, `gl.nondet.exec_prompt`, `gl.vm.run_nondet_unsafe`
-- **Consensus path:** Dispute resolution runs through GenLayer's REAL nondeterministic + equivalence-principle machinery — NOT a single leader-only LLM call
-- **Error handling:** Classified `[EXPECTED]` / `[EXTERNAL]` / `[TRANSIENT]` / `[LLM_ERROR]` prefixes for deterministic validator comparison
-- **GenLayer-native:** AI consensus replaces human arbiter — non-deterministic dispute resolution
-- **Evidence system:** Both parties submit on-chain — AI evaluates BOTH sides
-- **Transparency:** Decision + explanation stored permanently on-chain
-- **Gas efficient:** O(1) lookups, paginated event queries
+1. **Lint first**: `genvm-lint check contracts/decision.py`
+2. **Direct mode tests**: Fast (30ms), no server. Tests business logic, parsing, storage. Validator logic NOT exercised.
+3. **Integration tests**: Slow (seconds-minutes), full consensus. Tests validator agreement, real LLM calls. Run before deployment.
 
-### 🔬 The Consensus Path (how validators agree)
-
-This is the part that makes the AI escrow resolution reproducible across
-validators instead of trusting one leader's answer:
-
-```
-resolve_with_ai(payer)
-  └─ _evaluate_dispute(escrow)
-       └─ gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
-            │
-            ├─ leader_fn:
-            │     gl.nondet.exec_prompt(prompt, response_format="json")
-            │     _parse_ai_verdict(raw)  -> {decision, refund_percentage, explanation}
-            │
-            └─ validator_fn(leaders_res):
-                  independently reruns the SAME prompt
-                  compares:
-                    * decision must match EXACTLY (settlement outcome)
-                    * refund_percentage within ±10 (partial cases)
-                  -> agree only if substantive decision converges
-```
-
-The prompt is built deterministically from on-chain escrow state, so the only
-nondeterminism is the LLM itself — which the equivalence principle handles by
-having validators independently rerun and compare the decision field.
+Tests mock the nondeterministic LLM via `direct_vm.set_ai_prompt_response()`. In direct mode the validator is NOT exercised (per GenLayer testing strategy); the leader path + parsing + storage is validated here.
 
 ---
 
-## 🎯 Why This Matters
+## 📜 Contract API
 
-1. **Real-world ambiguity:** "Was work completed?" → AI CAN answer, traditional code CANNOT
-2. **No human arbiter:** AI consensus is unbiased, always available, cannot be bribed
-3. **Transparency:** Every AI decision has a traceable, on-chain explanation
-4. **Fairness:** Both parties submit evidence — AI sees BOTH sides
-5. **Speed:** From idea to tested contract in minutes, not days
-6. **Quality:** AI catches common bugs (reentrancy, state validation, consensus issues)
-7. **Reproducibility:** Anyone with pip + genlayer-test can verify in <1 second
+### Write Methods
+
+| Method | Description |
+|--------|-------------|
+| `evaluate(description: str) -> str` | Input a string, AI consensus evaluates, returns `"approved"` or `"rejected"`, saves on-chain. |
+
+### View Methods
+
+| Method | Description |
+|--------|-------------|
+| `get_task(task_id: u256) -> dict` | Read a task's description, decision, and explanation. |
+| `get_task_count() -> u256` | Total tasks evaluated. |
+
+---
+
+## 🛡️ Safety & Simplicity
+
+This contract intentionally avoids:
+- ❌ Token transfers (`gl.transfer`)
+- ❌ Balance logic (`gl.message.value`)
+- ❌ `msg.sender` logic (`gl.message.sender_account`)
+- ❌ Custom error prefixes
+- ❌ Complex escrow / multi-party state machines
+- ❌ Event logging
+
+This keeps the contract **minimal, auditable, and focused** on the core GenLayer capability: **AI consensus on subjective decisions**.

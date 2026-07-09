@@ -13,7 +13,7 @@ Use this text directly in the submission form fields:
 ### Project Name
 
 ```
-VibeFlow — AI Smart Contract Builder on GenLayer
+AI Decision Contract using GenLayer Consensus
 ```
 
 ---
@@ -21,7 +21,7 @@ VibeFlow — AI Smart Contract Builder on GenLayer
 ### Tagline / Short Description (1 line)
 
 ```
-GenLayer-native escrow where AI consensus replaces human arbiter: both parties submit evidence on-chain, AI evaluates through validator consensus, decision + explanation stored permanently. Demonstrates why GenLayer handles real-world ambiguity that traditional blockchains cannot.
+This project demonstrates a GenLayer-native intelligent contract that uses AI-assisted reasoning combined with validator consensus to evaluate subjective inputs.
 ```
 
 ---
@@ -45,218 +45,197 @@ Select from portal dropdown (likely): **Smart Contract** or **Developer Tools**
 ### Full Description
 
 ```markdown
-## 🧠 What is VibeFlow?
+This project demonstrates a GenLayer-native intelligent contract that uses AI-assisted reasoning combined with validator consensus to evaluate subjective inputs.
 
-VibeFlow is an **AI-native development loop** for GenLayer intelligent contracts. Instead of manually writing, compiling, debugging, and testing smart contracts, you simply **describe what you want in English**, and Claude Code (with GenLayer Skills plugin) generates production-ready code — complete with linting, tests, and deployment instructions.
+Unlike traditional smart contracts, this contract allows non-deterministic evaluation of user-submitted tasks using GenLayer Skills.
 
-## 🔥 Why GenLayer is Different from Traditional Blockchains
+## Features
 
-This contract demonstrates the **fundamental difference** between GenLayer and traditional blockchains:
+- AI-based evaluation of user input
+- Validator consensus mechanism
+- Fully GenLayer-native contract
+- Successful execution trace included
+- Robust LLM output normalization (handles case variations and aliases)
 
-### Traditional Blockchain Escrow (Ethereum/Solidity)
-- payer → payee → **human arbiter** (deterministic boolean: release or refund)
-- Arbiter can be: bribed, absent, biased, expensive
-- `"Was work completed?"` → **code CANNOT answer this**
-- No on-chain explanation for WHY a decision was made
-- Single point of failure — if arbiter disappears, funds are locked
+## How it works
 
-### GenLayer-Native Escrow (this contract)
-- payer → payee → **AI consensus** (evaluates real-world ambiguity)
-- Both parties submit **evidence on-chain** — transparent, auditable
-- AI evaluates **BOTH sides** through validator consensus — fair, unbiased
-- `"Was work completed?"` → **AI CAN answer this, with reasoning**
-- Decision + explanation + evidence_assessment stored **permanently on-chain**
-- No human gatekeeper — **any party can trigger resolution**
+1. User submits a task description
+2. AI evaluates the task
+3. Validators reach consensus
+4. Final decision is stored on-chain
 
-### The Key Insight
-Traditional smart contracts handle **deterministic** conditions:
-- ✅ `"Was a hash submitted?"` → yes/no → code can check
-- ❌ `"Was work completed satisfactorily?"` → subjective → code CANNOT check
+## Why it matters
 
-GenLayer's AI consensus handles exactly these **ambiguous, real-world questions**.
+This shows how GenLayer enables subjective decision-making that cannot be handled by traditional deterministic smart contracts.
 
-## 📜 The Contract: Escrow with AI Consensus Dispute Resolution
-
-| Feature | Description | Why It Matters |
-|---------|-------------|----------------|
-| **Deposit** | Payer locks native tokens (no arbiter param) | Simplified — AI handles disputes |
-| **Approve** | Payer releases to payee (minus fee) | Trustless settlement |
-| **Cancel** | Payer gets full refund | Safety valve |
-| **Dispute** | Any party raises dispute (payer address + reason) | Equal access — no arbiter gatekeeper |
-| **Evidence** | Both parties submit evidence on-chain | 🔥 AI sees BOTH sides — fair evaluation |
-| **AI Resolve** | AI consensus evaluates evidence → decision + explanation | 🔥 GenLayer-native — replaces human arbiter |
-| **Event Logging** | All state changes + evidence + AI decisions recorded | 🔥 Full audit trail |
-| **Fee Collection** | Basis-point fee on release | Monetization built-in |
-| **Error Classification** | `[EXPECTED]` / `[EXTERNAL]` prefixes | GenLayer consensus safety |
-
-### State Machine
+## The GenLayer Consensus Path
 
 ```
-                          ┌─── RELEASED (payer approves — happy path)
-                          │
-FUNDED ───────────────────┼─── CANCELLED (payer cancels — refund)
-                          │
-                          └─── DISPUTED ──► AI evaluates evidence ──► RELEASED (AI: release_payment)
-                                           │                        └─► CANCELLED (AI: refund_payer)
-                                           │                        └─► RELEASED  (AI: partial_refund — split)
+evaluate(description)
+  └─ gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
+       │
+       ├─ leader_fn:
+       │     gl.nondet.exec_prompt(prompt, response_format="json")
+       │     _parse_verdict(raw) -> {decision, explanation}
+       │
+       └─ validator_fn(leaders_res):
+             independently reruns the SAME prompt
+             compares the `decision` field EXACTLY
+             -> agree ONLY if decision converges
+             -> otherwise consensus fails and rotates/retries
 ```
 
-### AI Decision Output (stored on-chain)
+## Safety & Simplicity
 
-The LLM verdict is produced through the equivalence principle and parsed into:
+This contract intentionally avoids:
+- ❌ Token transfers (`gl.transfer`)
+- ❌ Balance logic (`gl.message.value`)
+- ❌ `msg.sender` logic
+- ❌ Custom error prefixes
+- ❌ Complex escrow / multi-party state machines
 
-```json
-{
-  "decision": "partial_refund",
-  "refund_percentage": 40,
-  "explanation": "60% of goods delivered satisfactorily. 40% missing due to stock-out. Payer gets 40% refund."
-}
+This keeps the contract minimal, auditable, and focused on the core GenLayer capability: AI consensus on subjective decisions.
+
+## Testing
+
+- **Lint**: `genvm-lint check contracts/decision.py`
+- **Direct-mode tests**: `pytest tests/direct/test_decision.py -v`
+- **Live execution**: Deployed and called via GenLayer CLI (execution trace included)
 ```
 
-Validators independently rerun the same prompt and must agree on `decision`
-(exact) and `refund_percentage` (within ±10) for consensus.
+---
 
-## 🧪 Testing — 24+ Tests, < 1 Second
-
-All tests run in **direct mode** (no server, no Docker):
-
-```
-pytest tests/direct/ -v
-→ 24+ passed in <1s
-```
-
-Test coverage includes:
-- ✅ Deposit (happy path, zero reject, self-payee reject, duplicate reject)
-- ✅ Approve (release, non-payer reject, wrong-status reject)
-- ✅ Cancel (refund, post-approve reject)
-- ✅ Dispute (payer raises, payee raises, non-party reject)
-- ✅ Evidence (payer submits, payee submits, both sides, non-party reject, before-dispute reject)
-- ✅ AI Dispute Resolution (release_payment, refund_payer, partial_refund, non-party reject, wrong-status reject, event logging, decision+explanation storage, no-evidence fallback)
-- ✅ Events (deposit logged, evidence logged)
-- ✅ View helpers (exists())
-
-## 🤖 The "Vibe Layer" — AI Collaboration
-
-The contract was built iteratively through AI collaboration:
-
-**Prompt 1:** "Create escrow with deposit/approve/cancel"
-→ AI generates base contract with TreeMap storage, @gl.public.write decorators
-
-**Prompt 2:** "Improve by adding dispute resolution, logging events, optimizing gas"
-→ AI adds: raise_dispute(), DynArray[EventLog] for audit trail, error classification
-
-**Prompt 3:** "Transform into GenLayer-native contract — replace arbiter with AI consensus"
-→ AI adds:
-  • 🔥 Remove arbiter entirely — AI consensus IS the arbiter
-  • 🔥 submit_evidence() — both parties present their side on-chain
-  • 🔥 resolve_with_ai() — any party can trigger, no human gatekeeper
-  • 🔥 AI prompt designed for real-world ambiguity ("was work completed?")
-  • 🔥 evidence_assessment in AI output — structured reasoning
-  • 🔥 Full explanation stored on-chain for transparency
-
-This shows how AI can take a contract from basic → production-ready → GenLayer-native in minutes.
-
-## 🔧 How to Reproduce
+### How to Verify
 
 ```bash
-# 1. Install GenLayer tools
-pip install genvm-linter genlayer-test pytest
+# Install dependencies
+pip install -r requirements.txt
+npm install -g genlayer
 
-# 2. Validate
-genvm-lint check contracts/escrow.py
+# Lint the contract
+genvm-lint check contracts/decision.py
 
-# 3. Run tests
-pytest tests/direct/ -v
+# Run direct-mode tests
+pytest tests/direct/test_decision.py -v
 
-# 4. Deploy to testnet
-genlayer client deploy contracts/escrow.py --args '[50]' --network testnet
-```
-
-## 🏗️ Technical Depth
-
-- **Storage:** `TreeMap[Address, EscrowState]`, `DynArray[EventLog]`, `u256`
-- **SDK:** `@gl.public.view`, `@gl.public.write`, `gl.message`, `gl.transfer`, `gl.block.time`, `gl.nondet.exec_prompt`, `gl.vm.run_nondet_unsafe`
-- **Consensus path:** Dispute resolution runs through GenLayer's REAL nondeterministic + equivalence-principle machinery — `gl.vm.run_nondet_unsafe(leader_fn, validator_fn)` where the validator independently reruns the same prompt and compares the `decision` field exactly + `refund_percentage` within ±10. NOT a single leader-only LLM call.
-- **Error handling:** Classified `[EXPECTED]` / `[EXTERNAL]` / `[TRANSIENT]` / `[LLM_ERROR]` prefixes for deterministic validator comparison
-- **GenLayer-native:** AI consensus replaces human arbiter — non-deterministic dispute resolution
-- **Evidence system:** Both parties submit on-chain — AI evaluates BOTH sides
-- **Transparency:** Decision + explanation stored permanently on-chain
-- **Gas efficient:** O(1) lookups, paginated event queries
-
-## 🎯 Why This Matters
-
-1. **Real-world ambiguity:** "Was work completed?" → AI CAN answer, traditional code CANNOT
-2. **No human arbiter:** AI consensus is unbiased, always available, cannot be bribed
-3. **Transparency:** Every AI decision has a traceable, on-chain explanation
-4. **Fairness:** Both parties submit evidence — AI sees BOTH sides
-5. **Speed:** From idea to tested contract in minutes, not days
-6. **Reproducibility:** Anyone with pip + genlayer-test can verify in <1 second
+# Deploy & run live (see RUN.md for full steps)
+genlayer network set studionet
+genlayer deploy --contract contracts/decision.py
+genlayer write <address> evaluate --args "Build a REST API for a todo app"
+genlayer call <address> get_task --args 1
 ```
 
 ---
 
-### Tags / Keywords
+## 📁 Project Structure
 
 ```
-genlayer, smart-contract, escrow, ai-consensus, dispute-resolution, evidence-based, python, web3, blockchain, developer-tools, non-deterministic
+VibeFlow — AI Smart Contract Builder on GenLayer/
+├── contracts/
+│   └── decision.py          # AI-Assisted Decision Contract (GenLayer-native, minimal)
+├── tests/
+│   └── direct/
+│       ├── conftest.py       # Shared test fixtures (genlayer_test plugin)
+│       └── test_decision.py  # Direct-mode tests (fast, in-memory)
+├── requirements.txt          # genlayer-test, genvm-linter, pytest
+├── README.md                # Full documentation
+├── RUN.md                   # Step-by-step deploy & run guide
+└── SUBMISSION.md            # This file
 ```
-
----
-
-## 📦 Files in Submission
-
-| File | Purpose |
-|------|---------|
-| [`contracts/escrow.py`](contracts/escrow.py) | GenLayer-native intelligent contract (AI consensus replaces arbiter) |
-| [`tests/direct/test_escrow.py`](tests/direct/test_escrow.py) | 24+ direct-mode test cases (evidence + AI resolution) |
-| [`tests/direct/conftest.py`](tests/direct/conftest.py) | Pytest fixtures |
-| [`requirements.txt`](requirements.txt) | Python dependencies |
-| [`README.md`](README.md) | Full project documentation |
-| [`SUBMISSION.md`](SUBMISSION.md) | Submission guide |
-| [`.gitignore`](.gitignore) | Git ignore rules |
-
----
-
-## 🔧 Step-by-Step: Push to GitHub
-
-```bash
-# In project directory
-cd "j:/VibeFlow — AI Smart Contract Builder on GenLayer"
-
-# Initialize git
-git init
-
-# Add all files
-git add -A
-
-# Commit
-git commit -m "🔥 VibeFlow — GenLayer-native escrow: AI consensus replaces human arbiter
-
-- Removed arbiter entirely — AI consensus IS the arbiter
-- Both parties submit evidence on-chain via submit_evidence()
-- resolve_with_ai() — any party can trigger, no human gatekeeper
-- AI evaluates real-world ambiguity ('was work completed?')
-- Decision + explanation + evidence_assessment stored on-chain
-- 24+ direct-mode tests covering evidence + AI resolution"
-
-# Create repo on GitHub first (public), then:
-git remote add origin https://github.com/<YOUR_USERNAME>/vibeflow-genlayer.git
-git branch -M main
-git push -u origin main
-```
-
-> **Pro tip:** Add a `genlayer` topic tag on your GitHub repo for discoverability.
 
 ---
 
 ## ✅ Submission Checklist
 
-- [x] Contract is GenLayer-native (uses `gl.nondet.exec_prompt` + `gl.vm.run_nondet_unsafe` equivalence principle for consensus)
-- [x] No human arbiter — AI consensus handles disputes
-- [x] Both parties can submit evidence on-chain
-- [x] AI decision + explanation stored permanently on-chain
-- [x] Error classification (`[EXPECTED]` / `[EXTERNAL]`) for consensus safety
-- [x] Event logging for full audit trail
-- [x] Direct-mode tests (no server, no Docker, <1s)
-- [x] README explains why GenLayer is different from traditional blockchains
-- [x] Reproducible: `pip install` + `pytest` → verify in <1 second
+- [x] Contract uses pinned runner version hash (no `test`/`latest` aliases)
+- [x] Contract uses `gl.nondet.exec_prompt()` for nondeterministic LLM calls
+- [x] Contract uses `gl.vm.run_nondet_unsafe(leader_fn, validator_fn)` — real equivalence principle
+- [x] Validator independently reruns the same prompt (does NOT trust the leader)
+- [x] Field-level comparison: `decision` exact match
+- [x] LLM resilience: defensive parsing, key aliasing, type coercion
+- [x] No token transfers, no balance logic, no msg.sender, no escrow
+- [x] Direct-mode tests covering leader path + parsing + storage (39 tests pass)
+- [x] README.md with full documentation
+- [x] RUN.md with deploy + call + proof capture steps
+- [x] Deploy & run live: `genlayer deploy` + `genlayer write` + capture logs ✅
+- [ ] Push to GitHub and replace `<YOUR_USERNAME>` in the URL above
+
+---
+
+## 🔥 Execution Proof (Live on StudioNet)
+
+The contract was deployed and executed live on **GenLayer StudioNet** (gasless network).
+This proves the full GenLayer consensus path works end-to-end — not just unit tests.
+
+### Network
+
+```
+Network:    StudioNet (gasless)
+Chain ID:   61999
+RPC:        https://studio.genlayer.com/api
+```
+
+### Step 1 — Deploy
+
+```bash
+genlayer network set studionet
+genlayer deploy --contract contracts/decision.py
+```
+
+**Result:**
+
+```
+Contract Address: 0xD658FD6baC547Dd5BC0e5eCf72712EE843e3C1F5
+Transaction Hash: 0x203423dde5492f8caeb28384d3f813c310d73fb9799b3717d2a5f03fab938626
+Status:           ACCEPTED
+Consensus:        MAJORITY_AGREE (5/5 validators AGREE, 1 round)
+```
+
+### Step 2 — Write (AI Evaluation)
+
+```bash
+genlayer write 0xD658FD6baC547Dd5BC0e5eCf72712EE843e3C1F5 evaluate \
+  --args "I completed the project successfully"
+```
+
+**Result:**
+
+```
+Transaction Hash: 0x61053947ce7a0010d8294d4d61363172326b114303c7a9b6f7c10237599c19d0
+Status:           ACCEPTED
+Consensus:        MAJORITY_AGREE (4/5 AGREE, 1 IDLE, 1 round)
+Execution:        SUCCESS
+```
+
+The leader executed `gl.nondet.exec_prompt()` and validators independently reran
+the same prompt, comparing the `decision` field. Consensus was reached.
+
+### Step 3 — Read (On-Chain Verification)
+
+```bash
+genlayer call 0xD658FD6baC547Dd5BC0e5eCf72712EE843e3C1F5 get_task --args 1
+```
+
+**Result:**
+
+```json
+{
+  "task_id": "1",
+  "description": "I completed the project successfully",
+  "decision": "rejected",
+  "explanation": "The task is too vague to evaluate. It only states 'I completed the project successfully' without defining the project, success criteria, deliverables, or evidence. As a result, it is not clear, not sufficiently detailed, and cannot be reasonably verified."
+}
+```
+
+### What This Proves
+
+| Requirement | Evidence |
+|---|---|
+| ✅ Contract runs in CLI | Deployed + write + call all succeeded |
+| ✅ `gl.nondet.exec_prompt()` | Leader ran LLM, got JSON verdict |
+| ✅ `gl.vm.run_nondet_unsafe()` | Validator consensus reached (MAJORITY_AGREE) |
+| ✅ Equivalence principle | Validators independently reran prompt, compared `decision` |
+| ✅ JSON parsing safe | LLM response parsed into `{decision, explanation}` |
+| ✅ No transfer/balance/msg.sender | Contract has none of these |
+| ✅ Decision stored on-chain | `get_task` returns the AI decision + explanation |
+| ✅ AI reasoning on-chain | Full explanation text persisted in storage |
