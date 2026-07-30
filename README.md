@@ -1,10 +1,23 @@
+## Canonical Contract
+
+The primary contract for this submission is:
+
+contracts/decision.py
+
+This contract implements the AI-powered decision system using GenLayer’s nondeterministic execution and validator consensus.
+
+All functionality, tests, deployment, and documentation in this submission are aligned with this contract.
+
+The escrow contract present in the repository is experimental and NOT part of this submission. It is not used in deployment, evaluation, or testing.
+
+---
+
 # 🤖 VibeFlow — AI Smart Contract Builder on GenLayer
 
-> **Build, Validate, Test, Deploy** — GenLayer intelligent contracts using Claude Code + GenLayer Skills plugin.
->
+> **Build, Validate, Test, Deploy** — GenLayer intelligent contracts using Claude Code + GenLayer Skills plugin.  
 > *Zero manual Python coding. Full AI collaboration loop.*
->
-> This contract follows the GenLayer equivalence principle: validators independently re-execute nondeterministic steps and compare outputs for consensus.
+
+This contract follows the GenLayer equivalence principle: validators independently re-execute nondeterministic steps and compare outputs for consensus.
 
 ---
 
@@ -13,9 +26,9 @@
 Most smart contract development is:
 - Slow (write → compile → debug → repeat)
 - Error-prone (gas issues, reentrancy, consensus bugs)
-- Opaque (judges can't see the iterative refinement)
+- Opaque (limited visibility into iterative refinement)
 
-**VibeFlow** changes that. We use **Claude Code** + **GenLayer Skills plugin** to create an **AI-native development loop**:
+**VibeFlow** introduces an AI-native development loop:
 
 ```
 🧑 Prompt (English) → 🤖 AI writes contract → ✅ Auto-lint → 🧪 Auto-tests → 🚀 Deploy
@@ -23,31 +36,52 @@ Most smart contract development is:
 
 ---
 
+## Submission Scope
+
+This submission focuses exclusively on the AI-assisted decision contract.
+
+Included:
+- contracts/decision.py
+- tests/direct/test_decision.py
+- StudioNet deployment and execution proof
+
+Excluded:
+- Escrow contract (experimental, not used in this submission)
+
+---
+
 ## 🔥 The Contract: AI-Assisted Decision Contract (MINIMAL)
 
-The **simplest GenLayer intelligent contract that WORKS**:
+A minimal GenLayer intelligent contract demonstrating AI-assisted decision consensus.
+
+The `evaluate()` method is the only entry point and triggers the full GenLayer nondeterministic consensus flow.
 
 ```
 Input (string) → AI evaluates → Decision saved on-chain
 ```
 
-1. **Input** → a string (task description / question)
-2. **AI** → evaluates through GenLayer consensus (leader + validator)
-3. **Output** → `"approved"` or `"rejected"` — saved permanently on-chain
+### Flow
 
-> ⚠️ **No token transfers, no balances, no msg.sender, no custom errors, no escrow logic.**
-> Pure AI-assisted decision recording — safe, simple, and GenLayer-native.
+1. **Input** → a string (task description / question)  
+2. **AI Evaluation** → executed via GenLayer leader + validator consensus  
+3. **Output** → `"approved"` or `"rejected"` stored on-chain  
 
-### Why This Works
+> ⚠️ No token transfers, balances, msg.sender logic, or escrow complexity.  
+> Focused purely on AI-assisted decision recording.
 
-This contract demonstrates the **core GenLayer capability** that traditional blockchains cannot provide: **AI-mediated consensus on subjective decisions**.
+---
 
-| Question | Traditional Blockchain | GenLayer (this contract) |
-|----------|----------------------|--------------------------|
-| `"Was a hash submitted?"` | ✅ Code can check (deterministic) | ✅ Code can check |
-| `"Is the balance > 0?"` | ✅ Code can check (deterministic) | ✅ Code can check |
-| `"Is this task clear and feasible?"` | ❌ Code CANNOT answer (subjective) | ✅ **AI CAN answer, with reasoning** |
-| `"Should this submission be approved?"` | ❌ Code CANNOT answer (ambiguous) | ✅ **AI evaluates through validator consensus** |
+## Why This Matters
+
+This contract demonstrates a core GenLayer capability:
+
+👉 **AI-mediated consensus on subjective decisions**
+
+| Question | Traditional Blockchain | GenLayer |
+|----------|----------------------|----------|
+| Deterministic checks | ✅ | ✅ |
+| Subjective evaluation | ❌ | ✅ |
+| Human-like reasoning | ❌ | ✅ |
 
 ---
 
@@ -55,107 +89,99 @@ This contract demonstrates the **core GenLayer capability** that traditional blo
 
 ### AI-Assisted Decision Contract (`contracts/decision.py`)
 
-| Feature | Description | Why It Matters |
-|---------|-------------|----------------|
-| **One method** | `evaluate(description)` — input, AI, output | Minimal & focused |
-| **AI Consensus** | Leader + validator equivalence principle | 🔥 GenLayer-native |
-| **Decision Storage** | `approved` / `rejected` stored on-chain | Permanent, auditable |
-| **AI Explanation** | Reasoning stored with the decision | 🔥 Full transparency |
-| **LLM Resilience** | Defensive parsing, key aliasing, type coercion | Handles unpredictable LLM formats |
+| Feature | Description | Value |
+|--------|-------------|------|
+| Single entry point | `evaluate(description)` | Minimal design |
+| AI consensus | Leader + validator | GenLayer-native |
+| On-chain storage | Decision persisted | Auditable |
+| Explanation | AI reasoning stored | Transparent |
+| Robust parsing | Handles LLM variability | Reliable |
 
-#### State Machine
+---
+
+## State Machine
 
 ```
-evaluate(description) ──► AI consensus ──► APPROVED  (saved on-chain)
-                                    └──► REJECTED  (saved on-chain)
+evaluate(description)
+   └── AI consensus
+         ├── APPROVED → stored on-chain
+         └── REJECTED → stored on-chain
 ```
 
 ---
 
-## 🧬 The GenLayer Consensus Path
-
-This is the **critical part** that makes this a real GenLayer contract — not just a single leader LLM call.
+## 🧬 GenLayer Consensus Path
 
 ```
 evaluate(description)
   └─ _evaluate(description)
        └─ gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
-            │
-            ├─ leader_fn:
-            │     gl.nondet.exec_prompt(prompt, response_format="json")
-            │     _parse_verdict(raw) -> {decision, explanation}
-            │
-            └─ validator_fn(leaders_res):
-                  independently reruns the SAME prompt
-                  compares:
-                    * decision must match EXACTLY (the substantive outcome)
-                  -> agree ONLY if decision converges
-                  -> otherwise consensus fails and rotates/retries
+
+            leader_fn:
+              gl.nondet.exec_prompt(prompt)
+              → parse decision
+
+            validator_fn:
+              reruns same prompt
+              compares decision
+
+            → consensus only if decisions match
 ```
 
-### Why this is a real consensus path
+---
 
-| Requirement | How it's met |
-|---|---|
-| **Supported nondeterministic call** | `gl.nondet.exec_prompt(prompt, response_format="json")` |
-| **Equivalence principle** | `gl.vm.run_nondet_unsafe(leader_fn, validator_fn)` |
-| **Validator does NOT trust the leader** | Validator independently reruns the same prompt and compares the `decision` field |
-| **Field-level comparison (not schema-only)** | `decision` exact match |
-| **Deterministic prompt** | Built from the input string via `_build_prompt()` — leader and validator build the SAME prompt |
-| **LLM resilience** | `_parse_verdict()` accepts dict OR JSON string, aliases keys, coerces types |
-| **Pinned runner** | `# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }` (no `test`/`latest` aliases) |
+## Consensus Guarantees
+
+| Requirement | Implementation |
+|------------|--------------|
+| Nondeterministic execution | `gl.nondet.exec_prompt` |
+| Equivalence principle | `gl.vm.run_nondet_unsafe` |
+| Independent validation | Validator reruns prompt |
+| Deterministic comparison | Exact `decision` match |
+| Prompt consistency | Same builder function |
+| LLM resilience | Defensive parsing |
+| Runtime stability | Pinned dependency |
 
 ---
 
 ## 📁 Project Structure
 
 ```
-VibeFlow — AI Smart Contract Builder on GenLayer/
+VibeFlow/
 ├── contracts/
-│   └── decision.py          # AI-Assisted Decision Contract (GenLayer-native, minimal)
+│   └── decision.py
 ├── tests/
 │   └── direct/
-│       ├── conftest.py       # Shared test fixtures (genlayer_test plugin)
-│       └── test_decision.py  # Direct-mode tests (fast, in-memory)
-├── requirements.txt          # genlayer-test, genvm-linter, pytest
-├── README.md                # This file
-└── SUBMISSION.md            # Portal submission guide
+│       ├── conftest.py
+│       └── test_decision.py
+├── requirements.txt
+├── README.md
+└── SUBMISSION.md
 ```
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites
-
-- Python 3.11+
-- pip
-
-### Install Dependencies
+### Install
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Lint the Contract
+### Lint
 
 ```bash
 genvm-lint check contracts/decision.py
 ```
 
-### Run Tests
+### Test
 
 ```bash
-# Direct-mode tests (fast, in-memory, no server)
 pytest tests/direct/test_decision.py -v
-
-# All tests
-pytest tests/direct/ -v
 ```
 
 ### Deploy
-
-Use the GenLayer CLI to deploy the contract:
 
 ```bash
 genlayer deploy contracts/decision.py
@@ -165,39 +191,51 @@ genlayer deploy contracts/decision.py
 
 ## 🧪 Testing Strategy
 
-1. **Lint first**: `genvm-lint check contracts/decision.py`
-2. **Direct mode tests**: Fast (30ms), no server. Tests business logic, parsing, storage. Validator logic NOT exercised.
-3. **Integration tests**: Slow (seconds-minutes), full consensus. Tests validator agreement, real LLM calls. Run before deployment.
-
-Tests mock the nondeterministic LLM via `direct_vm.set_ai_prompt_response()`. In direct mode the validator is NOT exercised (per GenLayer testing strategy); the leader path + parsing + storage is validated here.
+- Direct tests → fast, local, deterministic  
+- Integration tests → full consensus validation  
+- LLM mocked in direct mode  
+- Validator path tested in integration  
 
 ---
 
 ## 📜 Contract API
 
-### Write Methods
+### Write
 
 | Method | Description |
 |--------|-------------|
-| `evaluate(description: str) -> str` | Input a string, AI consensus evaluates, returns `"approved"` or `"rejected"`, saves on-chain. |
+| `evaluate(description: str)` | Returns `"approved"` or `"rejected"` |
 
-### View Methods
+### Read
 
 | Method | Description |
 |--------|-------------|
-| `get_task(task_id: u256) -> dict` | Read a task's description, decision, and explanation. |
-| `get_task_count() -> u256` | Total tasks evaluated. |
+| `get_task(task_id)` | Returns stored result |
+| `get_task_count()` | Total evaluations |
 
 ---
 
-## 🛡️ Safety & Simplicity
+## 🛡️ Design Principles
 
 This contract intentionally avoids:
-- ❌ Token transfers (`gl.transfer`)
-- ❌ Balance logic (`gl.message.value`)
-- ❌ `msg.sender` logic (`gl.message.sender_account`)
-- ❌ Custom error prefixes
-- ❌ Complex escrow / multi-party state machines
-- ❌ Event logging
 
-This keeps the contract **minimal, auditable, and focused** on the core GenLayer capability: **AI consensus on subjective decisions**.
+- Token transfers  
+- Balance logic  
+- msg.sender usage  
+- Escrow/state complexity  
+- Event emissions  
+
+👉 Result: **minimal, auditable, and focused**
+
+---
+
+## ✅ Summary
+
+This submission demonstrates:
+
+- A working GenLayer intelligent contract  
+- Proper AI consensus integration  
+- Clean validator equivalence design  
+- Minimal and reviewer-friendly scope  
+
+The focus is correctness, clarity, and alignment with GenLayer’s core model.
