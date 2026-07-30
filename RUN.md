@@ -1,204 +1,90 @@
-# 🏃 Run Guide — Deploy & Execute the AI Decision Contract
+# Run and Verify the Canonical Decision Contract
 
-> Step-by-step commands to deploy the contract, call it, and capture proof of execution.
+This guide applies only to [`contracts/decision.py`](contracts/decision.py). The escrow prototype is outside the submission scope.
 
----
+## Prerequisites
 
-## 📋 Prerequisites
+- Python 3.11 or newer
+- Node.js 18 or newer
+- GenLayer CLI
 
 ```bash
-# 1. Install Python 3.11+ (from python.org)
-# 2. Install Node.js 18+ (from nodejs.org)
-
-# Install Python dependencies
 pip install -r requirements.txt
-
-# Install GenLayer CLI
 npm install -g genlayer
 ```
 
----
+## 1. Validate locally
 
-## 🚀 Step 1 — Start Local Studio (genlayer dev)
+Run the canonical direct tests and lint the exact file that will be deployed:
 
 ```bash
-# Initialize a local GenLayer environment
-genlayer init --numValidators 5 --headless
-
-# Start the Studio (local blockchain + validators)
-genlayer up
+pytest tests/direct/test_decision.py -v
+genvm-lint check contracts/decision.py
 ```
 
-> This starts a local GenLayer network with 5 validators. The Studio UI runs at `http://localhost:8545`.
+Direct mode mocks the LLM and validates the leader path, parsing, errors, ID allocation, and storage. Independent validator execution is verified by the live StudioNet transaction.
 
----
-
-## 🌐 Step 2 — Set Network & Account
+## 2. Select StudioNet
 
 ```bash
-# Use localnet (the Studio you just started)
-genlayer network set localnet
-
-# Verify network config
+genlayer network set studionet
 genlayer network info
-
-# Check your account
 genlayer account
 ```
 
-> If no account exists, create one:
-> ```bash
-> genlayer account create --name dev1
-> genlayer account use dev1
-> ```
+StudioNet is gasless, so a zero GEN balance does not block deployment or interaction.
 
----
-
-## 📦 Step 3 — Deploy the Contract
+## 3. Deploy
 
 ```bash
-# Deploy the AI Decision Contract (no constructor args needed)
 genlayer deploy --contract contracts/decision.py
 ```
 
-> **Copy the contract address from the output!** You'll need it for the next steps.
->
-> Example output:
-> ```
-> Contract deployed at: 0x1234...abcd
-> Transaction hash: 0x5678...efgh
-> ```
+Record both values from the output:
 
----
+- Contract address
+- Deployment transaction hash
 
-## ✍️ Step 4 — Call evaluate() (Write Transaction)
+Inspect the deployment receipt and confirm execution succeeded:
 
 ```bash
-# Replace <ADDRESS> with your deployed contract address
-genlayer write <ADDRESS> evaluate --args "Build a REST API for a todo app with Node.js and Express"
+genlayer receipt <DEPLOY_TX_HASH> --stdout --stderr
+genlayer schema <CONTRACT_ADDRESS>
+genlayer code <CONTRACT_ADDRESS>
 ```
 
-> **Copy the transaction hash from the output!** You'll need it to get the receipt.
->
-> Expected output:
-> ```
-> Transaction submitted: 0xabcd...1234
-> ```
+A transaction can reach `ACCEPTED` or `FINALIZED` even when contract execution failed. Treat the deployment as successful only when the receipt shows successful execution and the schema/code commands return the deployed contract.
 
----
-
-## 🧾 Step 5 — Get the Receipt (Proof of Execution)
+## 4. Execute the AI decision
 
 ```bash
-# Replace <TX_HASH> with the transaction hash from Step 4
-# This waits for FINALIZED status and shows full execution result
-genlayer receipt <TX_HASH> --stdout --stderr
+genlayer write <CONTRACT_ADDRESS> evaluate --args "Build a documented REST API with tests and clear acceptance criteria"
 ```
 
-> Expected output (proof of successful execution):
-> ```
-> Status: FINALIZED
-> Execution: SUCCESS
-> Result: "approved"
-> Consensus reached
-> ```
-
----
-
-## 📖 Step 6 — Read the Stored Decision (View Call)
+Record the write transaction hash, then inspect it:
 
 ```bash
-# Read task #1 from on-chain storage
-genlayer call <ADDRESS> get_task --args 1
+genlayer receipt <WRITE_TX_HASH> --stdout --stderr
 ```
 
-> Expected output:
-> ```json
-> {
->   "task_id": "1",
->   "description": "Build a REST API for a todo app with Node.js and Express",
->   "decision": "approved",
->   "explanation": "The task is clear, well-defined, and feasible..."
-> }
-> ```
+Confirm the receipt shows successful execution and a consensus result.
+
+## 5. Verify persisted state
+
+For a fresh deployment, the first evaluation is task `1`:
 
 ```bash
-# Check total tasks evaluated
-genlayer call <ADDRESS> get_task_count
+genlayer call <CONTRACT_ADDRESS> get_task --args 1
+genlayer call <CONTRACT_ADDRESS> get_task_count
 ```
 
-> Expected output:
-> ```
-> "1"
-> ```
+The stored task must contain:
 
----
+- The submitted description
+- A decision of `approved` or `rejected`
+- A non-empty AI explanation
+- A task count of `1`
 
-## 📸 Step 7 — Capture Proof
+## Evidence
 
-### Option A: Screenshots
-Take screenshots of:
-1. ✔ Contract deployed (Step 3 output with address)
-2. ✔ Function call (Step 4 output with tx hash)
-3. ✔ Output result (Step 5 receipt showing `SUCCESS` + `Result: "approved"`)
-4. ✔ Consensus reached (Step 5 showing `FINALIZED`)
-
-### Option B: Copy Logs
-Save the terminal output to a file:
-
-```bash
-# Capture full execution trace
-{
-  echo "=== CONTRACT DEPLOY ==="
-  genlayer deploy --contract contracts/decision.py
-  echo ""
-  echo "=== EVALUATE CALL ==="
-  genlayer write <ADDRESS> evaluate --args "Build a REST API for a todo app with Node.js and Express"
-  echo ""
-  echo "=== RECEIPT ==="
-  genlayer receipt <TX_HASH> --stdout --stderr
-  echo ""
-  echo "=== GET TASK ==="
-  genlayer call <ADDRESS> get_task --args 1
-} > execution_proof.txt 2>&1
-```
-
-Then attach `execution_proof.txt` to your submission.
-
----
-
-## 🧪 Alternative: Run Tests (No Network Needed)
-
-If you just want to verify the contract logic without deploying:
-
-```bash
-# Lint
-genvm-lint check contracts/decision.py
-
-# Direct-mode tests (fast, in-memory, mocks the LLM)
-pytest tests/direct/test_decision.py -v
-```
-
----
-
-## 🛑 Stop the Studio
-
-When done:
-
-```bash
-genlayer stop
-```
-
----
-
-## 📝 Quick Reference
-
-| Step | Command |
-|------|---------|
-| Start Studio | `genlayer up` |
-| Set network | `genlayer network set localnet` |
-| Deploy | `genlayer deploy --contract contracts/decision.py` |
-| Call (write) | `genlayer write <ADDRESS> evaluate --args "..."` |
-| Receipt | `genlayer receipt <TX_HASH> --stdout --stderr` |
-| Read (view) | `genlayer call <ADDRESS> get_task --args 1` |
-| Stop Studio | `genlayer stop` |
+The verified address, transaction hashes, receipt outcomes, and state output for the submitted deployment are recorded in [`SUBMISSION.md`](SUBMISSION.md).

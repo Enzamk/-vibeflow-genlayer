@@ -29,10 +29,8 @@ This project demonstrates a GenLayer-native intelligent contract that uses AI-as
 ### GitHub Repository URL
 
 ```
-https://github.com/<YOUR_USERNAME>/vibeflow-genlayer
+https://github.com/Enzamk/-vibeflow-genlayer
 ```
-
-> ⚠️ Replace `<YOUR_USERNAME>` with your actual GitHub username after pushing.
 
 ---
 
@@ -154,11 +152,12 @@ VibeFlow — AI Smart Contract Builder on GenLayer/
 - [x] Field-level comparison: `decision` exact match
 - [x] LLM resilience: defensive parsing, key aliasing, type coercion
 - [x] No token transfers, no balance logic, no msg.sender, no escrow
-- [x] Direct-mode tests covering leader path + parsing + storage (39 tests pass)
+- [x] Direct-mode tests covering leader path + parsing + storage (12 tests pass)
 - [x] README.md with full documentation
 - [x] RUN.md with deploy + call + proof capture steps
 - [x] Deploy & run live: `genlayer deploy` + `genlayer write` + capture logs ✅
-- [ ] Push to GitHub and replace `<YOUR_USERNAME>` in the URL above
+- [x] GitHub repository URL configured
+- [ ] Commit and push the current local changes
 
 ---
 

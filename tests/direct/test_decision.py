@@ -115,13 +115,26 @@ def test_evaluate_handles_key_aliases(direct_vm, direct_deploy):
     assert state["explanation"] == "Too vague."
 
 
-def test_evaluate_invalid_decision_reverts(direct_vm, direct_deploy):
-    """🔥 LLM returns invalid decision — contract rejects it."""
+def test_evaluate_accepts_exact_decision_alias(direct_vm, direct_deploy):
+    """A known decision alias is normalized."""
     contract = direct_deploy("contracts/decision.py")
 
     direct_vm.set_ai_prompt_response({
-        "decision": "maybe",
-        "explanation": "Unsure."
+        "decision": "APPROVE",
+        "explanation": "Clear enough."
+    })
+
+    assert contract.evaluate("Build a documented API") == "approved"
+
+
+@pytest.mark.parametrize("decision", ["maybe", "unapproved", "not rejected"])
+def test_evaluate_invalid_decision_reverts(direct_vm, direct_deploy, decision):
+    """Unknown or ambiguous decisions are rejected."""
+    contract = direct_deploy("contracts/decision.py")
+
+    direct_vm.set_ai_prompt_response({
+        "decision": decision,
+        "explanation": "Invalid output."
     })
 
     with direct_vm.expect_revert():

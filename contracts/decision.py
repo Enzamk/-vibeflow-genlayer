@@ -5,33 +5,19 @@ import re
 from dataclasses import dataclass
 from genlayer import *
 
-# ─────────────────────────────────────────────────────────────
-# AI-Assisted Decision Contract (GenLayer-Native) — MINIMAL
-# ─────────────────────────────────────────────────────────────
+# AI-assisted decision contract.
 #
-# The simplest GenLayer intelligent contract that WORKS:
-#   1. Input  → a string (task description / question)
-#   2. AI     → evaluates through GenLayer consensus
-#   3. Output → "approved" or "rejected" — saved on-chain
-#
-# ⚠️  NO token transfers, NO balances, NO msg.sender,
-#     NO custom errors, NO escrow logic.
-#
-# CONSENSUS PATH (required by GenLayer):
-#   evaluate() runs gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
-#     leader_fn   -> gl.nondet.exec_prompt(prompt, response_format="json")
-#     validator_fn -> independently reruns the SAME prompt, compares
-#                     the `decision` field EXACTLY
-# ─────────────────────────────────────────────────────────────
+# evaluate() executes an LLM prompt through run_nondet_unsafe(). The validator
+# independently reruns the same prompt and accepts only an exact decision match.
 
 
 @allow_storage
 @dataclass
 class Task:
-    """One submitted task + its AI decision. No money, no sender."""
+    """One submitted task and its AI decision."""
     description: str
-    decision: str          # approved | rejected
-    explanation: str       # AI reasoning — stored on-chain
+    decision: str
+    explanation: str
 
 
 class AIDecisionContract(gl.Contract):
@@ -40,19 +26,14 @@ class AIDecisionContract(gl.Contract):
     Input a string → AI consensus evaluates → decision saved on-chain.
     """
 
-    # ── Storage ──────────────────────────────────────
     tasks: TreeMap[u256, Task]
     next_id: u256
-
-    # ── Init ────────────────────────────────────────
 
     def __init__(self):
         self.next_id = u256(1)
 
-    # ── AI Evaluation (GenLayer consensus) ──────────
-
     def _build_prompt(self, description: str) -> str:
-        """Build the evaluation prompt. Deterministic — leader and
+        """Build the evaluation prompt. The leader and
         validator build the SAME prompt from the same input."""
         return (
             "You are an impartial AI evaluator on the GenLayer blockchain.\n"
@@ -89,12 +70,10 @@ class AIDecisionContract(gl.Contract):
                     decision = raw[alt]
                     break
 
-        # Robust normalization: handle case variations + common aliases
-        # e.g. "APPROVED", "Approved", "yes", "approve" -> "approved"
         decision_raw = str(decision).lower().strip()
-        if "approve" in decision_raw or decision_raw in ("yes", "accept", "pass", "true", "1"):
+        if decision_raw in ("approved", "approve", "yes", "accept", "pass", "true", "1"):
             decision = "approved"
-        elif "reject" in decision_raw or decision_raw in ("no", "deny", "fail", "false", "0"):
+        elif decision_raw in ("rejected", "reject", "no", "deny", "fail", "false", "0"):
             decision = "rejected"
         else:
             raise gl.vm.UserError("Invalid decision: " + str(decision))
@@ -126,8 +105,6 @@ class AIDecisionContract(gl.Contract):
             return leaders_res.calldata["decision"] == validator_result["decision"]
 
         return gl.vm.run_nondet_unsafe(run, validator_fn)
-
-    # ── Public methods ───────────────────────────────
 
     @gl.public.write
     def evaluate(self, description: str) -> str:
